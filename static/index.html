@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Go chatick ;)</title>
+    <script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+    <script src="/js/jquery.cookie.js"></script>
+    <style>
+        .float-left {
+            float: left;
+        }
+        #status-ok {
+            color: forestgreen;
+            font-weight: 700;
+        }
+        #status-err {
+            color: maroon;
+            font-weight: 900;
+        }
+        #inp-form {
+            margin-top: 20px;
+        }
+        #app-log {
+            margin-top: 80px;
+        }
+        #inp-text {
+            width: 250px;
+        }
+        .date-splitter {
+            font-style: italic;
+            color: darkgray;
+        }
+    </style>
+</head>
+<body>
+<div>
+    <div class="box-status">
+        <img class="float-left" src="https://golang.org/doc/gopher/talks.png" />
+        <span id="status-ok">online</span>
+        <span id="status-err" hidden>connection error</span>
+        <span id="box-user"><input id="inp-name" type="text" /></span>
+    </div>
+
+    <form id="inp-form">
+    Message: <input id="inp-text" type="text" />
+    <input id="inp-button" type="submit" value="Send" />
+    </form>
+
+    <div id="app-log"></div>
+</div>
+
+<script>
+    var lastId = -1;
+    var username = '';
+    var ip = '';
+    var lastDate = '';
+
+    function getWebsocketUrl() {
+        return 'ws://' + location.hostname + (location.port ? ':' + location.port : '') + '/chat/';
+    }
+
+    function getRandomName() {
+        var min = 10000;
+        var max = 99999;
+        return 'user' + parseInt(Math.random() * (max - min) + min);
+    }
+
+    function getFormattedDate(str) {
+        var months = {};
+        months['01'] = 'January';
+        months['02'] = 'February';
+        months['03'] = 'March';
+        months['04'] = 'April';
+        months['05'] = 'May';
+        months['06'] = 'June';
+        months['07'] = 'July';
+        months['08'] = 'August';
+        months['09'] = 'September';
+        months['10'] = 'October';
+        months['11'] = 'November';
+        months['12'] = 'December';
+        return months[str[0] + str[1]] + ' ' + ((str[3] != '0') ? str[3] : '') + str[4];
+    }
+
+    function showError(error) {
+        $('#status-ok').hide();
+        $('#status-err').text(error);
+        $('#status-err').show();
+    }
+    function hideError() {
+        $('#status-ok').show();
+        $('#status-err').hide();
+    }
+
+    function showMessage(res) {
+        if (res && $.parseJSON(res)) {
+            res = $.parseJSON(res);
+            var msgId = 'msg_' + res["Id"];
+
+            var currentDate = res["Timestamp"].substring(5,10);
+            if (lastDate && currentDate != lastDate) {
+                $('#app-log').prepend('<span class="date-splitter">~~~ ' + getFormattedDate(lastDate) + ' ~~~</span><br>');
+            }
+            lastDate = currentDate;
+
+            $('#app-log').prepend('<span class="msg" id="' + msgId + '"></span><br>');
+            $('#' + msgId).text(res["Timestamp"].substring(11,16) + ' @' + res["Name"] + ': ' + res["Text"]);
+            lastId = res["Id"];
+			
+			hideError();
+        }
+    }
+
+    $(function(){
+		username = $.cookie('username');
+        if (username == undefined || username == "") {
+            username = getRandomName();
+            $.cookie('username', username);
+        }
+        $('#inp-name').val(username);
+
+        $('#inp-name').on('change', function() {
+            username = $.trim($('#inp-name').val());
+            $.cookie('username', username);
+        });
+
+        $.get("http://ipinfo.io", function(response) {
+            ip = '' + response.ip;
+            console.log('get IP: ' + ip);
+        }, "jsonp");
+		
+		var ws = new WebSocket(getWebsocketUrl());
+		ws.onclose = function (evt) {
+            showError('Connection closed.');
+        };
+        ws.onmessage = function (evt) {
+            showMessage(evt.data);
+        };
+
+        $('#inp-form').on('submit', function() {
+            if ($('#inp-text').val() == "") {
+                return false;
+            }
+            var msg = $.trim($('#inp-text').val());
+            $('#inp-text').val('');
+			ws.send(JSON.stringify({
+				Name: (username == "") ? ip : username,
+                Text: msg
+			}));
+            return false;
+        });
+    });
+</script>
+</body>
+</html>
